@@ -287,7 +287,10 @@ def test_webhook_service_private_guards_cover_invalid_paths(db_session, seeded_i
             phase="inclusion",
         )
 
-    with pytest.raises(AppException, match="Simulation callback is not valid for the current state"):
+    with pytest.raises(
+        AppException,
+        match="Simulation callback is not valid for the current state",
+    ):
         service._validate_transition(
             proposal=proposal,
             event="simulation_completed",
