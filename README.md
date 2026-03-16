@@ -107,10 +107,12 @@ Fluxo implementado:
 
 1. `POST /api/proposals/simulate` cria a proposta com status `pending` e publica um job no `SQS`.
 2. A Lambda registrada no `LocalStack` consome a fila.
-3. O worker chama o banco mock e grava o `external_protocol`.
+3. A lógica de processamento executada pela Lambda chama o banco mock e grava o `external_protocol`.
 4. O banco mock envia `POST /api/webhooks/bank-callback`.
 5. O webhook atualiza status, `bank_response`, `interest_rate` e `installment_value` quando aplicável.
 6. `POST /api/proposals/{id}/submit` reaproveita o mesmo fluxo assíncrono para inclusão da proposta.
+
+Observação: neste projeto não há um comando separado para subir um worker manual em polling. O caminho principal de consumo assíncrono é `SQS -> Lambda no LocalStack`.
 
 ## Endpoints principais
 
@@ -171,7 +173,7 @@ curl -X POST http://localhost:8000/api/clients \
 .\.venv\Scripts\pytest --cov --cov-report=term-missing --cov-report=xml
 ```
 
-O workflow em `.github/workflows/tests.yml` executa `ruff` e a suíte com cobertura.
+Essa meta de cobertura foi validada localmente durante a entrega.
 
 Meta adotada nesta entrega:
 
