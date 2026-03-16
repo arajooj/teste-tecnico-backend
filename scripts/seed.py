@@ -10,7 +10,6 @@ from sqlalchemy import select
 from app.core.db import SessionLocal
 from app.modules.identity.infrastructure.models import TenantModel, UserModel, UserRole
 
-
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 

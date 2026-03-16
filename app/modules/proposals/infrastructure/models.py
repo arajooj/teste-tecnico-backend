@@ -2,8 +2,8 @@
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
 from decimal import Decimal
+from enum import StrEnum
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -48,7 +48,11 @@ class ProposalModel(Base):
     installments: Mapped[int] = mapped_column(Integer, nullable=False)
     interest_rate: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
     installment_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default=ProposalStatus.PENDING.value)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ProposalStatus.PENDING.value,
+    )
     bank_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

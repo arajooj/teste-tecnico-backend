@@ -5,10 +5,15 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import MetaData, create_engine, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column, sessionmaker
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    declared_attr,
+    mapped_column,
+    sessionmaker,
+)
 
 from app.core.config import get_settings
-
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",

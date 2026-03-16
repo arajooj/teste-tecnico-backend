@@ -12,3 +12,4 @@ boto3
 pytest
 pytest-asyncio
 pytest-cov
+ruff
