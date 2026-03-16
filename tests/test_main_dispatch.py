@@ -63,6 +63,11 @@ def test_dispatch_pending_jobs_republishes_failed_jobs(db_session, seeded_identi
     db_session.refresh(job)
 
     queue = FakeQueue()
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: SimpleNamespace(environment="development"),
+    )
     monkeypatch.setattr(main, "SessionLocal", lambda: nullcontext(db_session))
     monkeypatch.setattr(main, "ProposalQueue", lambda: queue)
 
@@ -95,6 +100,11 @@ def test_dispatch_pending_jobs_skips_orphan_jobs(monkeypatch):
         def mark_job_published(self, job, proposal):  # pragma: no cover
             self.mark_job_published_called = True
 
+    monkeypatch.setattr(
+        main,
+        "get_settings",
+        lambda: SimpleNamespace(environment="development"),
+    )
     monkeypatch.setattr(main, "SessionLocal", lambda: nullcontext(object()))
     monkeypatch.setattr(main, "ProposalRepository", FakeRepository)
     monkeypatch.setattr(main, "ProposalQueue", FakeQueue)
