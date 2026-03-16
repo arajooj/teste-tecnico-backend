@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def dispatch_pending_jobs() -> None:
+    if get_settings().environment == "testing":
+        return
     with SessionLocal() as session:
         repository = ProposalRepository(session)
         queue = ProposalQueue()

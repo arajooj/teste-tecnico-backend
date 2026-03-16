@@ -1,3 +1,8 @@
+import os
+
+# Garante que o lifespan da API não tente conectar ao PostgreSQL/SQS nos testes.
+os.environ.setdefault("ENVIRONMENT", "testing")
+
 import uuid
 from collections.abc import Callable, Generator
 
