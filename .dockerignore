@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.pytest_cache
+.ruff_cache
+.venv
+__pycache__
+*.py[cod]
+*.db
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+dist
+build
+mock-bank-server
+lambda/dist

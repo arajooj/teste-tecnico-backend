@@ -131,6 +131,80 @@ def test_get_proposal_returns_404_for_other_tenant_record(
     assert response.json() == {"detail": "Proposal not found"}
 
 
+def test_get_proposal_returns_record_for_authenticated_tenant(
+    client,
+    db_session,
+    seeded_identity,
+    make_auth_headers,
+):
+    alpha_user = seeded_identity["alpha_user"]
+    alpha_client = create_client_for_user(db_session, alpha_user)
+    alpha_proposal = ProposalModel(
+        tenant_id=alpha_user.tenant_id,
+        client_id=alpha_client.id,
+        type=ProposalType.SIMULATION.value,
+        amount=Decimal("5000.00"),
+        installments=12,
+        status=ProposalStatus.SIMULATED.value,
+        created_by=alpha_user.id,
+    )
+    db_session.add(alpha_proposal)
+    db_session.commit()
+    db_session.refresh(alpha_proposal)
+
+    response = client.get(
+        f"/api/proposals/{alpha_proposal.id}",
+        headers=make_auth_headers(alpha_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(alpha_proposal.id)
+    assert response.json()["status"] == ProposalStatus.SIMULATED.value
+
+
+def test_list_proposals_supports_status_and_type_filters(
+    client,
+    db_session,
+    seeded_identity,
+    make_auth_headers,
+):
+    alpha_user = seeded_identity["alpha_user"]
+    alpha_client = create_client_for_user(db_session, alpha_user, cpf="11122233344")
+    db_session.add_all(
+        [
+            ProposalModel(
+                tenant_id=alpha_user.tenant_id,
+                client_id=alpha_client.id,
+                type=ProposalType.SIMULATION.value,
+                amount=Decimal("5000.00"),
+                installments=12,
+                status=ProposalStatus.SIMULATED.value,
+                created_by=alpha_user.id,
+            ),
+            ProposalModel(
+                tenant_id=alpha_user.tenant_id,
+                client_id=alpha_client.id,
+                type=ProposalType.PROPOSAL.value,
+                amount=Decimal("7000.00"),
+                installments=18,
+                status=ProposalStatus.APPROVED.value,
+                created_by=alpha_user.id,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(
+        f"/api/proposals?status=approved&type={ProposalType.PROPOSAL.value}",
+        headers=make_auth_headers(alpha_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["status"] == ProposalStatus.APPROVED.value
+    assert response.json()["items"][0]["type"] == ProposalType.PROPOSAL.value
+
+
 def test_submit_proposal_requires_simulated_status(
     client,
     db_session,

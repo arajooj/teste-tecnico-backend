@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from app.modules.proposals.infrastructure.models import ProposalStatus, Proposal
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 
 MODEL_REGISTRY = (identity_models,)
+logger = logging.getLogger(__name__)
 
 
 def process_proposal_job(
@@ -28,6 +30,10 @@ def process_proposal_job(
     session_factory: Callable = SessionLocal,
     bank_client_factory: Callable = MockBankClient,
 ) -> None:
+    logger.info(
+        "Processing proposal job",
+        extra={"action": action, "proposal_id": str(proposal_id)},
+    )
     with session_factory() as session:
         proposal_repository = ProposalRepository(session)
         client_repository = ClientRepository(session)
@@ -56,6 +62,7 @@ def process_proposal_job(
             proposal.external_protocol = protocol
             proposal.type = ProposalType.SIMULATION.value
             proposal_repository.save(proposal)
+            logger.info("Simulation sent to bank", extra={"proposal_id": str(proposal.id)})
             return
 
         if action == "submit":
@@ -75,6 +82,7 @@ def process_proposal_job(
             proposal.type = ProposalType.PROPOSAL.value
             proposal.status = ProposalStatus.SUBMITTED.value
             proposal_repository.save(proposal)
+            logger.info("Proposal submitted to bank", extra={"proposal_id": str(proposal.id)})
             return
 
         raise InvalidProposalStateError("Unsupported proposal queue action")

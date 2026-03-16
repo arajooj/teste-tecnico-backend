@@ -1,5 +1,6 @@
 """FastAPI application entrypoint."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,11 +13,19 @@ from app.modules.identity.api.router import router as identity_router
 from app.modules.proposals.api.router import router as proposals_router
 from app.modules.webhooks.api.router import router as webhooks_router
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    settings = get_settings()
+    logger.info(
+        "Starting API application",
+        extra={"environment": settings.environment, "version": settings.app_version},
+    )
     yield
+    logger.info("Stopping API application")
 
 
 def create_application() -> FastAPI:
