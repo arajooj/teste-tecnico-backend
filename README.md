@@ -4,6 +4,12 @@ API de propostas de crédito em `FastAPI` com autenticação JWT, multi-tenancy,
 
 O enunciado original do teste foi preservado em `DESAFIO.md`.
 
+## Contexto da entrega
+
+Minha stack principal no dia a dia é mais orientada a `Node.js`, mas para este desafio implementei a solução em `Python` seguindo os requisitos do enunciado.
+
+Também usei IA como apoio para acelerar documentação, revisão de texto e organização de partes da entrega. As decisões de implementação, a aplicação das regras de negócio e os ajustes na solução foram conduzidos e validados durante o desenvolvimento, inclusive na forma de organizar módulos, responsabilidades, fluxo assíncrono e apoio por abordagens agentic, roles e skills.
+
 ## Stack
 
 - `Python 3.11+`
@@ -84,6 +90,8 @@ Credenciais seeded:
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Observação: o framework da API é `FastAPI`. O `uvicorn` é o servidor ASGI usado para executar a aplicação `FastAPI` localmente.
+
 Documentação interativa:
 
 - Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -92,6 +100,8 @@ Documentação interativa:
 ## Fluxo assíncrono
 
 O processamento do banco não acontece diretamente no endpoint HTTP.
+
+Para ficar mais próximo de produção, a solução não ficou restrita a um worker simples rodando isoladamente. A escolha foi usar `LocalStack + SQS + Lambda`, simulando com mais fidelidade o fluxo assíncrono que seria esperado em um ambiente real.
 
 Fluxo implementado:
 
@@ -163,6 +173,11 @@ curl -X POST http://localhost:8000/api/clients \
 
 O workflow em `.github/workflows/tests.yml` executa `ruff` e a suíte com cobertura.
 
+Meta adotada nesta entrega:
+
+- `100%` de cobertura dos testes unitários no escopo medido pela configuração do projeto
+- cobertura concentrada em autenticação, regras de aplicação, repositórios, webhook e fluxo assíncrono
+
 ## Dockerfile da API
 
 Existe um `Dockerfile` na raiz como diferencial opcional.
@@ -182,6 +197,8 @@ docker run --rm -p 8000:8000 --env-file .env teste-tecnico-api
 ## Lambda local
 
 O pacote da Lambda é gerado automaticamente no `docker compose up` pelo serviço `lambda-builder`.
+
+Essa escolha foi intencional para manter o processamento assíncrono mais próximo de produção, usando `Lambda` conectada ao `SQS` no `LocalStack`, em vez de depender somente de um worker simplificado fora desse fluxo.
 
 Se quiser regenerar manualmente:
 
