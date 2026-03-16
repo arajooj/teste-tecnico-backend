@@ -25,15 +25,6 @@ class SimulateProposalCommand:
     installments: int
 
 
-@dataclass(frozen=True)
-class BankCallbackCommand:
-    protocol: str
-    event: str
-    status: str
-    data: dict
-    timestamp: str | None = None
-
-
 class ProposalCommands:
     """Coordinates proposal mutations and async workflow orchestration."""
 
@@ -89,31 +80,3 @@ class ProposalCommands:
         self._queue.send_message(action="submit", proposal_id=str(proposal.id))
         return proposal
 
-    def handle_bank_callback(self, *, command: BankCallbackCommand) -> ProposalModel:
-        proposal = self._repository.get_by_external_protocol(external_protocol=command.protocol)
-        if proposal is None:
-            raise ProposalNotFoundError()
-
-        next_status = self._map_callback_status(event=command.event, external_status=command.status)
-
-        if proposal.status == next_status and proposal.bank_response == command.__dict__:
-            return proposal
-
-        proposal.status = next_status
-        proposal.bank_response = command.__dict__
-        if command.event == "simulation_completed" and command.status == "approved":
-            proposal.interest_rate = command.data.get("interest_rate")
-            proposal.installment_value = command.data.get("installment_value")
-
-        return self._repository.save(proposal)
-
-    def _map_callback_status(self, *, event: str, external_status: str) -> str:
-        if event == "simulation_completed":
-            if external_status == "approved":
-                return ProposalStatus.SIMULATED.value
-            return ProposalStatus.SIMULATION_FAILED.value
-        if event == "inclusion_completed":
-            if external_status == "approved":
-                return ProposalStatus.APPROVED.value
-            return ProposalStatus.REJECTED.value
-        raise InvalidProposalStateError("Unsupported bank callback event")

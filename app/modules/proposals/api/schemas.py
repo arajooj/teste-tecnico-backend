@@ -45,11 +45,3 @@ class ProposalAcceptedResponse(BaseModel):
     id: UUID
     status: str
     message: str
-
-
-class BankCallbackPayload(BaseModel):
-    protocol: str
-    event: str
-    status: str
-    data: dict = Field(default_factory=dict)
-    timestamp: str | None = None
