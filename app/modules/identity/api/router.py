@@ -15,7 +15,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> LoginResponse:
     repository = IdentityRepository(db)
     service = IdentityService(repository)
-    result = service.login(email=payload.email, password=payload.password)
+    result = service.login(
+        tenant_id=payload.tenant_id,
+        email=payload.email,
+        password=payload.password,
+    )
     return LoginResponse(
         access_token=result.access_token,
         token_type=result.token_type,
