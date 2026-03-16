@@ -333,4 +333,36 @@ curl http://localhost:8001/health
 # 6. Desenvolva sua solução!
 ```
 
+## Setup local da API
+
+Sugestão de fluxo para desenvolver a API localmente usando `venv`:
+
+```powershell
+# 1. Crie e ative o ambiente virtual
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# 2. Instale as dependências
+pip install -r requirements.txt
+
+# 3. Suba a infraestrutura de apoio
+docker compose up -d
+
+# 4. Rode as migrations
+alembic upgrade head
+
+# 5. Execute o seed inicial
+python -m scripts.seed
+
+# 6. Inicie a API
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Arquivos criados nesta etapa inicial:
+- `requirements.txt`
+- `alembic/`
+- `scripts/seed.py`
+- `app/`
+- `tests/`
+
 Boa sorte!
