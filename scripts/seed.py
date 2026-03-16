@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
-from passlib.context import CryptContext
 from sqlalchemy import select
 
 from app.core.db import SessionLocal
+from app.core.security import hash_password
 from app.modules.identity.infrastructure.models import TenantModel, UserModel, UserRole
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+pwd_context = SimpleNamespace(hash=hash_password)
 
 
 TENANTS = [
