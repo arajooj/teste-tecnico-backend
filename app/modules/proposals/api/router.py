@@ -5,21 +5,19 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import AuthenticatedUser, get_current_user
 from app.modules.clients.infrastructure.repository import ClientRepository
 from app.modules.proposals.api.schemas import (
-    BankCallbackPayload,
     ProposalAcceptedResponse,
     ProposalListResponse,
     ProposalResponse,
     SimulateProposalRequest,
 )
 from app.modules.proposals.application.commands import (
-    BankCallbackCommand,
     ProposalCommands,
     SimulateProposalCommand,
 )
@@ -28,7 +26,6 @@ from app.modules.proposals.infrastructure.queue import ProposalQueue
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
-webhook_router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 
 def _build_commands(db: Session) -> ProposalCommands:
@@ -127,16 +124,3 @@ def get_proposal(
     return ProposalResponse.model_validate(proposal)
 
 
-@webhook_router.post("/bank-callback", status_code=status.HTTP_204_NO_CONTENT)
-def receive_bank_callback(payload: BankCallbackPayload, db: Session = Depends(get_db)) -> Response:
-    commands = _build_commands(db)
-    commands.handle_bank_callback(
-        command=BankCallbackCommand(
-            protocol=payload.protocol,
-            event=payload.event,
-            status=payload.status,
-            data=payload.data,
-            timestamp=payload.timestamp,
-        )
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
