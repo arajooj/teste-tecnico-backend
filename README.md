@@ -33,7 +33,7 @@ Também usei IA como apoio para acelerar documentação, revisão de texto e org
 
 ## Pré-requisitos
 
-- `Python 3.11+`
+- **Python 3.11+** — no Windows, use `py -0` para listar versões instaladas; se não tiver 3.11, instale ou use `py -3` (última 3.x disponível)
 - `Docker`
 - `Docker Compose`
 - Docker com suporte a `host.docker.internal` / `host-gateway` para o callback do `mock-bank`
@@ -55,10 +55,11 @@ Valores padrão:
 
 ### 1. Ambiente virtual
 
-Windows:
+Windows (use uma versão 3.11+; se `py -3.11` falhar, tente `py -3` ou `python -m venv .venv`):
 
 ```powershell
 py -3.11 -m venv .venv
+# Se não tiver 3.11:  py -3 -m venv .venv   ou   python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
@@ -70,6 +71,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+**Importante:** nos passos abaixo (infra, migrations, seed e API), use o mesmo terminal com o ambiente virtual **ativado**. Se não ativar, comandos como `alembic` não serão reconhecidos — nesse caso use `python -m alembic` (veja passo 3).
 
 ### 2. Infraestrutura
 
@@ -86,12 +89,14 @@ Isso sobe:
 
 ### 3. Migrations e seed
 
-Windows, Linux e macOS:
+No mesmo terminal (com o venv ativado). Windows, Linux e macOS:
 
 ```powershell
-alembic upgrade head
+python -m alembic upgrade head
 python -m scripts.seed
 ```
+
+Se preferir e o venv estiver ativado, pode usar `alembic upgrade head` em vez de `python -m alembic upgrade head`.
 
 Credenciais seeded:
 
@@ -263,8 +268,10 @@ chmod +x ./scripts/build_lambda_package.sh
 
 ## Troubleshooting
 
-- Se a API não conectar no banco, confirme se `postgres` está saudável e rode `alembic upgrade head`.
+- **Windows — `[WinError 10013]` ao subir a API:** a porta 8000 pode estar em uso ou bloqueada. Use outra porta, por exemplo `python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8080`. Se for testar o fluxo com webhook (mock-bank chamando de volta), defina no `.env`: `WEBHOOK_CALLBACK_BASE_URL=http://host.docker.internal:8080`. Para ver quem usa a 8000 no Windows: `netstat -ano | findstr :8000`.
+- Se a API não conectar no banco, confirme se `postgres` está saudável e rode `python -m alembic upgrade head`.
 - Se o webhook não atualizar a proposta, verifique se a API está disponível em `WEBHOOK_CALLBACK_BASE_URL` e se a Lambda foi criada com a mesma URL.
+- **LocalStack — `No such file or directory` para `create-queues.sh` / `zz-create-proposal-lambda.sh`:** o volume monta a pasta `localstack-init` do **diretório de onde você rodou** `docker compose`. Rode sempre na raiz do projeto (onde está o `docker-compose.yml`) e confira se existem `localstack-init/create-queues.sh` e `localstack-init/zz-create-proposal-lambda.sh`. Se a pasta estiver vazia ou faltando, o repositório pode ter sido clonado/copiado de forma incompleta — garanta que a pasta `localstack-init` com os dois scripts esteja presente e suba de novo: `docker compose down` e `docker compose up -d`.
 - Se a fila não processar, confira se o `docker compose up -d` gerou a Lambda e as filas no `LocalStack`.
 - Se mudar dependências usadas pela Lambda, regenere o pacote com `.\scripts\build_lambda_package.ps1`.
 - Em Linux, confirme que a sua versão do Docker suporta `host-gateway`, já que o `mock-bank` precisa alcançar a API no host.
