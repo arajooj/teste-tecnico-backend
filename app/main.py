@@ -9,6 +9,8 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.modules.clients.api.router import router as clients_router
 from app.modules.identity.api.router import router as identity_router
+from app.modules.proposals.api.router import router as proposals_router
+from app.modules.proposals.api.router import webhook_router
 
 
 @asynccontextmanager
@@ -28,6 +30,8 @@ def create_application() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(identity_router)
     app.include_router(clients_router)
+    app.include_router(proposals_router)
+    app.include_router(webhook_router)
 
     @app.get("/health", tags=["health"])
     def healthcheck() -> dict[str, str]:

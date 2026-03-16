@@ -13,11 +13,13 @@ from app.core.security import create_access_token, hash_password
 from app.main import create_application
 from app.modules.clients.infrastructure.models import ClientModel
 from app.modules.identity.infrastructure.models import TenantModel, UserModel, UserRole
+from app.modules.proposals.infrastructure.models import ProposalModel
 
 TABLES = [
     TenantModel.__table__,
     UserModel.__table__,
     ClientModel.__table__,
+    ProposalModel.__table__,
 ]
 
 

@@ -1,0 +1,92 @@
+import json
+from contextlib import nullcontext
+from datetime import date
+from decimal import Decimal
+
+from app.modules.clients.infrastructure.models import ClientModel
+from app.modules.proposals.infrastructure.bank_client import MockBankClient
+from app.modules.proposals.infrastructure.models import ProposalModel, ProposalStatus, ProposalType
+from app.workers import proposal_processor
+
+
+def create_client_for_user(db_session, user) -> ClientModel:
+    client = ClientModel(
+        tenant_id=user.tenant_id,
+        name="Worker Client",
+        cpf="12345678901",
+        birth_date=date(1990, 1, 1),
+        phone="11999999999",
+        created_by=user.id,
+    )
+    db_session.add(client)
+    db_session.commit()
+    db_session.refresh(client)
+    return client
+
+
+def test_worker_processes_simulation_message(db_session, seeded_identity, monkeypatch):
+    alpha_user = seeded_identity["alpha_user"]
+    customer = create_client_for_user(db_session, alpha_user)
+    proposal = ProposalModel(
+        tenant_id=alpha_user.tenant_id,
+        client_id=customer.id,
+        type=ProposalType.SIMULATION.value,
+        amount=Decimal("5000.00"),
+        installments=12,
+        status=ProposalStatus.PENDING.value,
+        created_by=alpha_user.id,
+    )
+    db_session.add(proposal)
+    db_session.commit()
+    db_session.refresh(proposal)
+    monkeypatch.setattr(proposal_processor, "SessionLocal", lambda: nullcontext(db_session))
+    monkeypatch.setattr(
+        MockBankClient,
+        "simulate",
+        lambda self, **kwargs: "MOCK-SIM-1",
+    )
+
+    proposal_processor.process_queue_message(
+        json.dumps({"action": "simulate", "proposal_id": str(proposal.id)})
+    )
+
+    db_session.expire_all()
+    proposal = db_session.get(ProposalModel, proposal.id)
+
+    assert proposal.status == ProposalStatus.PROCESSING.value
+    assert proposal.external_protocol == "MOCK-SIM-1"
+
+
+def test_worker_processes_submit_message(db_session, seeded_identity, monkeypatch):
+    alpha_user = seeded_identity["alpha_user"]
+    customer = create_client_for_user(db_session, alpha_user)
+    proposal = ProposalModel(
+        tenant_id=alpha_user.tenant_id,
+        client_id=customer.id,
+        external_protocol="MOCK-SIM-1",
+        type=ProposalType.SIMULATION.value,
+        amount=Decimal("5000.00"),
+        installments=12,
+        status=ProposalStatus.SIMULATED.value,
+        created_by=alpha_user.id,
+    )
+    db_session.add(proposal)
+    db_session.commit()
+    db_session.refresh(proposal)
+    monkeypatch.setattr(proposal_processor, "SessionLocal", lambda: nullcontext(db_session))
+    monkeypatch.setattr(
+        MockBankClient,
+        "submit",
+        lambda self, **kwargs: "MOCK-PROP-1",
+    )
+
+    proposal_processor.process_queue_message(
+        json.dumps({"action": "submit", "proposal_id": str(proposal.id)})
+    )
+
+    db_session.expire_all()
+    proposal = db_session.get(ProposalModel, proposal.id)
+
+    assert proposal.type == ProposalType.PROPOSAL.value
+    assert proposal.status == ProposalStatus.SUBMITTED.value
+    assert proposal.external_protocol == "MOCK-PROP-1"
