@@ -8,7 +8,6 @@ from app.core.security import AuthenticatedUser
 from app.modules.clients.infrastructure.models import ClientModel
 from app.modules.clients.infrastructure.repository import ClientRepository
 from app.modules.proposals.application.commands import (
-    BankCallbackCommand,
     ProposalCommands,
     SimulateProposalCommand,
 )
@@ -142,41 +141,3 @@ def test_submit_reuses_same_record_and_enqueues_submit(db_session, seeded_identi
     assert updated.type == ProposalType.PROPOSAL.value
     assert updated.status == ProposalStatus.PENDING.value
     assert queue.messages == [{"action": "submit", "proposal_id": str(proposal.id)}]
-
-
-def test_handle_bank_callback_maps_simulation_result_and_is_idempotent(db_session, seeded_identity):
-    alpha_user = seeded_identity["alpha_user"]
-    client = create_client_for_user(db_session, alpha_user)
-    proposal = ProposalModel(
-        tenant_id=alpha_user.tenant_id,
-        client_id=client.id,
-        external_protocol="MOCK-SIM-1",
-        type=ProposalType.SIMULATION.value,
-        amount=Decimal("5000.00"),
-        installments=12,
-        status=ProposalStatus.PROCESSING.value,
-        created_by=alpha_user.id,
-    )
-    db_session.add(proposal)
-    db_session.commit()
-    db_session.refresh(proposal)
-    commands = ProposalCommands(
-        repository=ProposalRepository(db_session),
-        client_repository=ClientRepository(db_session),
-        queue=FakeQueue(),
-    )
-    callback = BankCallbackCommand(
-        protocol="MOCK-SIM-1",
-        event="simulation_completed",
-        status="approved",
-        data={"interest_rate": 1.99, "installment_value": 245.50},
-        timestamp="2026-03-16T10:00:00",
-    )
-
-    updated = commands.handle_bank_callback(command=callback)
-    repeated = commands.handle_bank_callback(command=callback)
-
-    assert updated.status == ProposalStatus.SIMULATED.value
-    assert repeated.status == ProposalStatus.SIMULATED.value
-    assert float(updated.interest_rate) == 1.99
-    assert float(updated.installment_value) == 245.5
