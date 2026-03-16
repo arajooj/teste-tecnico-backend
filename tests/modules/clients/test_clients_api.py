@@ -111,6 +111,34 @@ def test_get_client_returns_404_for_other_tenant_record(
     assert response.json() == {"detail": "Client not found"}
 
 
+def test_get_client_returns_record_for_authenticated_tenant(
+    client,
+    db_session,
+    seeded_identity,
+    make_auth_headers,
+):
+    alpha_user = seeded_identity["alpha_user"]
+    alpha_client = ClientModel(
+        tenant_id=alpha_user.tenant_id,
+        name="Client Alpha",
+        cpf="12345678901",
+        birth_date=date(1990, 1, 1),
+        phone="11999999999",
+        created_by=alpha_user.id,
+    )
+    db_session.add(alpha_client)
+    db_session.commit()
+
+    response = client.get(
+        f"/api/clients/{alpha_client.id}",
+        headers=make_auth_headers(alpha_user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(alpha_client.id)
+    assert response.json()["name"] == "Client Alpha"
+
+
 def test_update_client_rejects_duplicate_cpf_within_same_tenant(
     client,
     db_session,
@@ -150,3 +178,41 @@ def test_update_client_rejects_duplicate_cpf_within_same_tenant(
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Client with this CPF already exists"}
+
+
+def test_update_client_persists_changes_for_authenticated_tenant(
+    client,
+    db_session,
+    seeded_identity,
+    make_auth_headers,
+):
+    alpha_user = seeded_identity["alpha_user"]
+    alpha_client = ClientModel(
+        tenant_id=alpha_user.tenant_id,
+        name="Client Alpha",
+        cpf="12345678901",
+        birth_date=date(1990, 1, 1),
+        phone="11999999999",
+        created_by=alpha_user.id,
+    )
+    db_session.add(alpha_client)
+    db_session.commit()
+    db_session.refresh(alpha_client)
+
+    response = client.put(
+        f"/api/clients/{alpha_client.id}",
+        headers=make_auth_headers(alpha_user),
+        json={
+            "name": "Client Alpha Updated",
+            "cpf": "12345678901",
+            "birth_date": "1990-05-10",
+            "phone": "11777777777",
+        },
+    )
+
+    db_session.refresh(alpha_client)
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Client Alpha Updated"
+    assert str(alpha_client.birth_date) == "1990-05-10"
+    assert alpha_client.phone == "11777777777"

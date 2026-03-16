@@ -45,5 +45,5 @@ def main() -> None:
     print(f"Lambda package created at {output_zip}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
