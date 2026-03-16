@@ -17,7 +17,7 @@ class ProposalQueueMessage:
 
 
 class ProposalQueue:
-    """Sends and receives proposal jobs from SQS."""
+    """Publishes proposal jobs to SQS."""
 
     def __init__(self, sqs_client=None, queue_name: str | None = None) -> None:
         settings = get_settings()
@@ -36,20 +36,6 @@ class ProposalQueue:
         self._client.send_message(
             QueueUrl=self._get_queue_url(),
             MessageBody=json.dumps(asdict(payload)),
-        )
-
-    def receive_messages(self, *, max_messages: int = 1, wait_time_seconds: int = 10) -> list[dict]:
-        response = self._client.receive_message(
-            QueueUrl=self._get_queue_url(),
-            MaxNumberOfMessages=max_messages,
-            WaitTimeSeconds=wait_time_seconds,
-        )
-        return response.get("Messages", [])
-
-    def delete_message(self, *, receipt_handle: str) -> None:
-        self._client.delete_message(
-            QueueUrl=self._get_queue_url(),
-            ReceiptHandle=receipt_handle,
         )
 
     def _get_queue_url(self) -> str:

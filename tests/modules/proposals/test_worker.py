@@ -39,15 +39,16 @@ def test_worker_processes_simulation_message(db_session, seeded_identity, monkey
     db_session.add(proposal)
     db_session.commit()
     db_session.refresh(proposal)
-    monkeypatch.setattr(proposal_processor, "SessionLocal", lambda: nullcontext(db_session))
-    monkeypatch.setattr(
-        MockBankClient,
-        "simulate",
-        lambda self, **kwargs: "MOCK-SIM-1",
-    )
+
+    def bank_client_factory() -> MockBankClient:
+        return MockBankClient()
+
+    monkeypatch.setattr(MockBankClient, "simulate", lambda self, **kwargs: "MOCK-SIM-1")
 
     proposal_processor.process_queue_message(
-        json.dumps({"action": "simulate", "proposal_id": str(proposal.id)})
+        json.dumps({"action": "simulate", "proposal_id": str(proposal.id)}),
+        session_factory=lambda: nullcontext(db_session),
+        bank_client_factory=bank_client_factory,
     )
 
     db_session.expire_all()
@@ -73,15 +74,16 @@ def test_worker_processes_submit_message(db_session, seeded_identity, monkeypatc
     db_session.add(proposal)
     db_session.commit()
     db_session.refresh(proposal)
-    monkeypatch.setattr(proposal_processor, "SessionLocal", lambda: nullcontext(db_session))
-    monkeypatch.setattr(
-        MockBankClient,
-        "submit",
-        lambda self, **kwargs: "MOCK-PROP-1",
-    )
+
+    def bank_client_factory() -> MockBankClient:
+        return MockBankClient()
+
+    monkeypatch.setattr(MockBankClient, "submit", lambda self, **kwargs: "MOCK-PROP-1")
 
     proposal_processor.process_queue_message(
-        json.dumps({"action": "submit", "proposal_id": str(proposal.id)})
+        json.dumps({"action": "submit", "proposal_id": str(proposal.id)}),
+        session_factory=lambda: nullcontext(db_session),
+        bank_client_factory=bank_client_factory,
     )
 
     db_session.expire_all()

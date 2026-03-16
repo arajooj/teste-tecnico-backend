@@ -1,13 +1,14 @@
-"""Worker responsible for processing queued proposal jobs."""
+"""Reusable proposal job processor used by Lambda handlers."""
 
 from __future__ import annotations
 
 import json
-import time
+from collections.abc import Callable
 from uuid import UUID
 
 from app.core.db import SessionLocal
 from app.modules.clients.infrastructure.repository import ClientRepository
+from app.modules.identity.infrastructure import models as identity_models
 from app.modules.proposals.domain.exceptions import (
     InvalidProposalStateError,
     ProposalClientNotFoundError,
@@ -15,19 +16,22 @@ from app.modules.proposals.domain.exceptions import (
 )
 from app.modules.proposals.infrastructure.bank_client import MockBankClient
 from app.modules.proposals.infrastructure.models import ProposalStatus, ProposalType
-from app.modules.proposals.infrastructure.queue import ProposalQueue
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 
+MODEL_REGISTRY = (identity_models,)
 
-def process_queue_message(message_body: str) -> None:
-    payload = json.loads(message_body)
-    action = payload["action"]
-    proposal_id = UUID(payload["proposal_id"])
 
-    with SessionLocal() as session:
+def process_proposal_job(
+    *,
+    action: str,
+    proposal_id: UUID,
+    session_factory: Callable = SessionLocal,
+    bank_client_factory: Callable = MockBankClient,
+) -> None:
+    with session_factory() as session:
         proposal_repository = ProposalRepository(session)
         client_repository = ClientRepository(session)
-        bank_client = MockBankClient()
+        bank_client = bank_client_factory()
 
         proposal = proposal_repository.get_by_id(proposal_id=proposal_id)
         if proposal is None:
@@ -76,15 +80,16 @@ def process_queue_message(message_body: str) -> None:
         raise InvalidProposalStateError("Unsupported proposal queue action")
 
 
-def run_worker(poll_interval_seconds: int = 2) -> None:
-    queue = ProposalQueue()
-    while True:
-        messages = queue.receive_messages(wait_time_seconds=10)
-        for message in messages:
-            process_queue_message(message["Body"])
-            queue.delete_message(receipt_handle=message["ReceiptHandle"])
-        time.sleep(poll_interval_seconds)
-
-
-if __name__ == "__main__":  # pragma: no cover
-    run_worker()
+def process_queue_message(
+    message_body: str,
+    *,
+    session_factory: Callable = SessionLocal,
+    bank_client_factory: Callable = MockBankClient,
+) -> None:
+    payload = json.loads(message_body)
+    process_proposal_job(
+        action=payload["action"],
+        proposal_id=UUID(payload["proposal_id"]),
+        session_factory=session_factory,
+        bank_client_factory=bank_client_factory,
+    )

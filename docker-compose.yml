@@ -1,6 +1,12 @@
-version: "3.8"
-
 services:
+  lambda-builder:
+    build:
+      context: .
+      dockerfile: ./lambda/Dockerfile
+    container_name: teste-tecnico-lambda-builder
+    volumes:
+      - ./:/workspace
+
   # ──────────────────────────────────────────────
   # PostgreSQL — Banco de dados principal
   # ──────────────────────────────────────────────
@@ -20,25 +26,38 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   # ──────────────────────────────────────────────
-  # LocalStack — Simula AWS SQS
+  # LocalStack — Simula AWS SQS e Lambda
   # ──────────────────────────────────────────────
   localstack:
     image: localstack/localstack:3.0
     container_name: teste-tecnico-localstack
+    depends_on:
+      lambda-builder:
+        condition: service_completed_successfully
     environment:
-      SERVICES: sqs
+      SERVICES: sqs,lambda,s3
       DEFAULT_REGION: us-east-1
+      DOCKER_HOST: unix:///var/run/docker.sock
+      MAIN_DOCKER_NETWORK: teste-tecnico-backend-network
+      LAMBDA_EVENT_SOURCE_MAPPING: v2
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: 60
     ports:
       - "4566:4566"
     volumes:
       - ./localstack-init:/etc/localstack/init/ready.d
+      - ./lambda/dist:/opt/code/lambda
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
 
   # ──────────────────────────────────────────────
   # Mock Bank Server — API bancária simulada
@@ -56,6 +75,12 @@ services:
       - "8001:8001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - backend
 
 volumes:
   pgdata:
+
+networks:
+  backend:
+    name: teste-tecnico-backend-network

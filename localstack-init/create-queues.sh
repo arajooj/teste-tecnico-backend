@@ -1,4 +1,6 @@
 #!/bin/bash
+set -eu
+
 echo "Criando filas SQS no LocalStack..."
 
 # Fila principal para processamento de propostas
