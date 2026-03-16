@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "python-design-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "b2ef661bb1c88fad08bc9fd38677dc302b750599260710daaf8a9e0a85fbcf04"
+    },
+    "python-performance-optimization": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "5a0b73f9cf738b980678fe98fbc9f9549320258fe097226de87b3afbf31f03fd"
+    },
+    "python-testing-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "45c36d56b92b0bdb99c86052b45e0c7e5e424c4ec7a4b2f45604e195dc80289c"
+    }
+  }
+}
