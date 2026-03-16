@@ -30,7 +30,10 @@ def process_proposal_job(
     session_factory: Callable = SessionLocal,
     bank_client_factory: Callable = MockBankClient,
 ) -> None:
-    logger.info("Processing proposal job", extra={"action": action, "proposal_id": str(proposal_id)})
+    logger.info(
+        "Processing proposal job",
+        extra={"action": action, "proposal_id": str(proposal_id)},
+    )
     with session_factory() as session:
         proposal_repository = ProposalRepository(session)
         client_repository = ClientRepository(session)

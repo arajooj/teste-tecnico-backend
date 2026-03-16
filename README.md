@@ -36,6 +36,7 @@ Também usei IA como apoio para acelerar documentação, revisão de texto e org
 - `Python 3.11+`
 - `Docker`
 - `Docker Compose`
+- Docker com suporte a `host.docker.internal` / `host-gateway` para o callback do `mock-bank`
 
 ## Variáveis de ambiente
 
@@ -53,10 +54,20 @@ Valores padrão:
 
 ### 1. Ambiente virtual
 
+Windows:
+
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+```
+
+Linux / macOS:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
 ### 2. Infraestrutura
@@ -74,6 +85,8 @@ Isso sobe:
 
 ### 3. Migrations e seed
 
+Windows, Linux e macOS:
+
 ```powershell
 alembic upgrade head
 python -m scripts.seed
@@ -86,8 +99,10 @@ Credenciais seeded:
 
 ### 4. API
 
+Windows, Linux e macOS:
+
 ```powershell
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Observação: o framework da API é `FastAPI`. O `uvicorn` é o servidor ASGI usado para executar a aplicação `FastAPI` localmente.
@@ -163,14 +178,18 @@ curl -X POST http://localhost:8000/api/clients \
 
 ### Rodar lint
 
+Windows, Linux e macOS:
+
 ```powershell
-.\.venv\Scripts\ruff check .
+python -m ruff check .
 ```
 
 ### Rodar testes com cobertura
 
+Windows, Linux e macOS:
+
 ```powershell
-.\.venv\Scripts\pytest --cov --cov-report=term-missing --cov-report=xml
+python -m pytest --cov --cov-report=term-missing --cov-report=xml
 ```
 
 Essa meta de cobertura foi validada localmente durante a entrega.
@@ -186,13 +205,13 @@ Existe um `Dockerfile` na raiz como diferencial opcional.
 
 Build:
 
-```powershell
+```bash
 docker build -t teste-tecnico-api .
 ```
 
 Run:
 
-```powershell
+```bash
 docker run --rm -p 8000:8000 --env-file .env teste-tecnico-api
 ```
 
@@ -204,8 +223,17 @@ Essa escolha foi intencional para manter o processamento assíncrono mais próxi
 
 Se quiser regenerar manualmente:
 
+Windows:
+
 ```powershell
 .\scripts\build_lambda_package.ps1
+```
+
+Linux / macOS:
+
+```bash
+chmod +x ./scripts/build_lambda_package.sh
+./scripts/build_lambda_package.sh
 ```
 
 ## Troubleshooting
@@ -214,3 +242,4 @@ Se quiser regenerar manualmente:
 - Se o webhook não atualizar a proposta, verifique se a API está disponível em `http://host.docker.internal:8000`.
 - Se a fila não processar, confira se o `docker compose up -d` gerou a Lambda e as filas no `LocalStack`.
 - Se mudar dependências usadas pela Lambda, regenere o pacote com `.\scripts\build_lambda_package.ps1`.
+- Em Linux, confirme que a sua versão do Docker suporta `host-gateway`, já que o `mock-bank` precisa alcançar a API no host.
