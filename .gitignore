@@ -1,9 +1,27 @@
+# Python cache / build
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
+
+# Virtual environment / local config
 .env
 .venv/
 venv/
+
+# Database / local files
 *.db
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Editor / IDE
 .idea/
 .vscode/
