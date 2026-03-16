@@ -6,7 +6,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "0001_initial_schema"
-down_revision = None
+down_revision = "0000_widen_version_num"
 branch_labels = None
 depends_on = None
 
