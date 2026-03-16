@@ -100,6 +100,10 @@ def upgrade() -> None:
         sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("client_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("external_protocol", sa.String(length=100), nullable=True),
+        sa.Column("simulation_protocol", sa.String(length=100), nullable=True),
+        sa.Column("inclusion_protocol", sa.String(length=100), nullable=True),
+        sa.Column("simulation_callback_token", sa.String(length=100), nullable=True),
+        sa.Column("inclusion_callback_token", sa.String(length=100), nullable=True),
         sa.Column("type", sa.String(length=50), nullable=False),
         sa.Column("amount", sa.Numeric(precision=12, scale=2), nullable=False),
         sa.Column("installments", sa.Integer(), nullable=False),
@@ -107,6 +111,14 @@ def upgrade() -> None:
         sa.Column("installment_value", sa.Numeric(precision=12, scale=2), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
         sa.Column("bank_response", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "processing_attempts",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("0"),
+        ),
+        sa.Column("last_enqueued_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_bank_error", sa.Text(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -139,10 +151,69 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_proposals")),
+        sa.UniqueConstraint(
+            "simulation_protocol",
+            name="uq_proposals_simulation_protocol",
+        ),
+        sa.UniqueConstraint(
+            "inclusion_protocol",
+            name="uq_proposals_inclusion_protocol",
+        ),
+        sa.UniqueConstraint(
+            "simulation_callback_token",
+            name="uq_proposals_simulation_callback_token",
+        ),
+        sa.UniqueConstraint(
+            "inclusion_callback_token",
+            name="uq_proposals_inclusion_callback_token",
+        ),
+    )
+
+    op.create_table(
+        "proposal_jobs",
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("proposal_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("action", sa.String(length=50), nullable=False),
+        sa.Column(
+            "status",
+            sa.String(length=50),
+            nullable=False,
+            server_default=sa.text("'pending'"),
+        ),
+        sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "attempts",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("0"),
+        ),
+        sa.Column("last_error", sa.Text(), nullable=True),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("processed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        ),
+        sa.ForeignKeyConstraint(
+            ["proposal_id"],
+            ["proposals.id"],
+            name=op.f("fk_proposal_jobs_proposal_id_proposals"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_proposal_jobs")),
     )
 
 
 def downgrade() -> None:
+    op.drop_table("proposal_jobs")
     op.drop_table("proposals")
     op.drop_table("clients")
     op.drop_table("users")

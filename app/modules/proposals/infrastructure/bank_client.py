@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from urllib.parse import urlencode
 
 import httpx
 
@@ -17,6 +18,11 @@ class MockBankClient:
         settings = get_settings()
         self._base_url = (base_url or settings.mock_bank_base_url).rstrip("/")
         self._timeout = timeout
+        self._callback_base_url = settings.webhook_callback_base_url.rstrip("/")
+
+    def build_callback_url(self, *, callback_token: str) -> str:
+        query = urlencode({"callback_token": callback_token})
+        return f"{self._callback_base_url}/api/webhooks/bank-callback?{query}"
 
     def simulate(
         self,

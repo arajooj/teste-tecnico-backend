@@ -1,6 +1,9 @@
 from app.modules.clients.infrastructure.models import ClientModel
 from app.modules.identity.infrastructure.models import TenantModel, UserModel, UserRole
 from app.modules.proposals.infrastructure.models import (
+    ProposalJobAction,
+    ProposalJobModel,
+    ProposalJobStatus,
     ProposalModel,
     ProposalStatus,
     ProposalType,
@@ -22,7 +25,10 @@ def test_client_model_has_expected_table_name_and_unique_constraint():
 
 def test_proposal_model_and_enums_match_expected_domain_values():
     assert ProposalModel.__tablename__ == "proposals"
+    assert ProposalJobModel.__tablename__ == "proposal_jobs"
     assert ProposalType.SIMULATION.value == "simulacao"
     assert ProposalType.PROPOSAL.value == "proposta"
     assert ProposalStatus.PENDING.value == "pending"
     assert ProposalStatus.APPROVED.value == "approved"
+    assert ProposalJobAction.SIMULATE.value == "simulate"
+    assert ProposalJobStatus.PENDING.value == "pending"

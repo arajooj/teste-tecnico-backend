@@ -31,12 +31,14 @@ def test_queue_send_message_serializes_expected_payload():
     client = FakeSQSClient()
     queue = ProposalQueue(sqs_client=client, queue_name="proposal-processing-queue")
 
-    queue.send_message(action="simulate", proposal_id="proposal-123")
+    queue.send_message(action="simulate", proposal_id="proposal-123", job_id="job-123")
 
     assert client.sent_messages == [
         {
             "QueueUrl": "https://example.com/proposal-processing-queue",
-            "MessageBody": '{"action": "simulate", "proposal_id": "proposal-123"}',
+            "MessageBody": (
+                '{"action": "simulate", "proposal_id": "proposal-123", "job_id": "job-123"}'
+            ),
         }
     ]
 
@@ -54,11 +56,13 @@ def test_bank_client_simulate_returns_protocol(monkeypatch):
         cpf="12345678901",
         amount=Decimal("5000.00"),
         installments=12,
+        webhook_url="http://callback.local/webhook?callback_token=abc",
     )
 
     assert protocol == "MOCK-SIM-1"
     assert captured_request["url"] == "http://mock-bank/api/simular"
     assert captured_request["json"]["cpf"] == "12345678901"
+    assert captured_request["json"]["webhook_url"] == "http://callback.local/webhook?callback_token=abc"
 
 
 def test_bank_client_submit_returns_protocol(monkeypatch):
@@ -77,8 +81,10 @@ def test_bank_client_submit_returns_protocol(monkeypatch):
         client_birth_date=date(1990, 1, 1),
         amount=Decimal("5000.00"),
         installments=12,
+        webhook_url="http://callback.local/webhook?callback_token=xyz",
     )
 
     assert protocol == "MOCK-PROP-1"
     assert captured_request["url"] == "http://mock-bank/api/incluir"
     assert captured_request["json"]["protocol"] == "MOCK-SIM-1"
+    assert captured_request["json"]["webhook_url"] == "http://callback.local/webhook?callback_token=xyz"

@@ -16,3 +16,11 @@ class ProposalClientNotFoundError(AppException):
 class InvalidProposalStateError(AppException):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=409)
+
+
+class ProposalDispatchError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            "Proposal persisted but the async job could not be published",
+            status_code=503,
+        )
