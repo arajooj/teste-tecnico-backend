@@ -3,7 +3,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.modules.clients.infrastructure.models import ClientModel
-from app.modules.proposals.infrastructure.models import ProposalModel, ProposalStatus, ProposalType
+from app.modules.proposals.infrastructure.models import (
+    ProposalJobModel,
+    ProposalModel,
+    ProposalStatus,
+    ProposalType,
+)
 from app.modules.proposals.infrastructure.queue import ProposalQueue
 
 
@@ -35,8 +40,8 @@ def test_simulate_proposal_returns_202_and_persists_pending(
     monkeypatch.setattr(
         ProposalQueue,
         "send_message",
-        lambda self, *, action, proposal_id: sent_messages.append(
-            {"action": action, "proposal_id": proposal_id}
+        lambda self, *, action, proposal_id, job_id: sent_messages.append(
+            {"action": action, "proposal_id": proposal_id, "job_id": job_id}
         ),
     )
 
@@ -51,12 +56,16 @@ def test_simulate_proposal_returns_202_and_persists_pending(
     )
 
     proposal = db_session.get(ProposalModel, UUID(response.json()["id"]))
+    job = db_session.query(ProposalJobModel).one()
 
     assert response.status_code == 202
     assert response.json()["status"] == ProposalStatus.PENDING.value
     assert proposal is not None
     assert proposal.type == ProposalType.SIMULATION.value
-    assert sent_messages == [{"action": "simulate", "proposal_id": str(proposal.id)}]
+    assert proposal.simulation_callback_token is not None
+    assert sent_messages == [
+        {"action": "simulate", "proposal_id": str(proposal.id), "job_id": str(job.id)}
+    ]
 
 
 def test_list_proposals_returns_only_authenticated_tenant_items(
@@ -248,6 +257,8 @@ def test_submit_proposal_returns_202_and_queues_job(
         tenant_id=alpha_user.tenant_id,
         client_id=customer.id,
         external_protocol="MOCK-SIM-1",
+        simulation_protocol="MOCK-SIM-1",
+        simulation_callback_token="sim-token-1",
         type=ProposalType.SIMULATION.value,
         amount=Decimal("5000.00"),
         installments=12,
@@ -261,8 +272,8 @@ def test_submit_proposal_returns_202_and_queues_job(
     monkeypatch.setattr(
         ProposalQueue,
         "send_message",
-        lambda self, *, action, proposal_id: sent_messages.append(
-            {"action": action, "proposal_id": proposal_id}
+        lambda self, *, action, proposal_id, job_id: sent_messages.append(
+            {"action": action, "proposal_id": proposal_id, "job_id": job_id}
         ),
     )
 
@@ -272,8 +283,13 @@ def test_submit_proposal_returns_202_and_queues_job(
     )
 
     db_session.refresh(proposal)
+    job = db_session.query(ProposalJobModel).one()
 
     assert response.status_code == 202
     assert proposal.type == ProposalType.PROPOSAL.value
     assert proposal.status == ProposalStatus.PENDING.value
-    assert sent_messages == [{"action": "submit", "proposal_id": str(proposal.id)}]
+    assert proposal.simulation_callback_token is None
+    assert proposal.inclusion_callback_token is not None
+    assert sent_messages == [
+        {"action": "submit", "proposal_id": str(proposal.id), "job_id": str(job.id)}
+    ]

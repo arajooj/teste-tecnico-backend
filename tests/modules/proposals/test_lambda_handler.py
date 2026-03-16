@@ -14,8 +14,18 @@ def test_lambda_handler_processes_all_sqs_records(monkeypatch):
     result = proposal_sqs_handler.handler(
         {
             "Records": [
-                {"body": json.dumps({"action": "simulate", "proposal_id": "one"})},
-                {"body": json.dumps({"action": "submit", "proposal_id": "two"})},
+                {
+                    "messageId": "msg-1",
+                    "body": json.dumps(
+                        {"action": "simulate", "proposal_id": "one", "job_id": "job-one"}
+                    ),
+                },
+                {
+                    "messageId": "msg-2",
+                    "body": json.dumps(
+                        {"action": "submit", "proposal_id": "two", "job_id": "job-two"}
+                    ),
+                },
             ]
         },
         None,
@@ -23,23 +33,32 @@ def test_lambda_handler_processes_all_sqs_records(monkeypatch):
 
     assert result == {"processed_records": 2}
     assert processed_messages == [
-        '{"action": "simulate", "proposal_id": "one"}',
-        '{"action": "submit", "proposal_id": "two"}',
+        '{"action": "simulate", "proposal_id": "one", "job_id": "job-one"}',
+        '{"action": "submit", "proposal_id": "two", "job_id": "job-two"}',
     ]
 
 
-def test_lambda_handler_propagates_processing_errors(monkeypatch):
+def test_lambda_handler_returns_partial_failures(monkeypatch):
     def raise_error(_body: str) -> None:
         raise RuntimeError("processing failed")
 
     monkeypatch.setattr(proposal_sqs_handler, "process_queue_message", raise_error)
 
-    try:
-        proposal_sqs_handler.handler(
-            {"Records": [{"body": json.dumps({"action": "simulate", "proposal_id": "one"})}]},
-            None,
-        )
-    except RuntimeError as exc:
-        assert str(exc) == "processing failed"
-    else:  # pragma: no cover
-        raise AssertionError("Lambda handler should propagate processing errors")
+    result = proposal_sqs_handler.handler(
+        {
+            "Records": [
+                {
+                    "messageId": "msg-1",
+                    "body": json.dumps(
+                        {"action": "simulate", "proposal_id": "one", "job_id": "job-one"}
+                    ),
+                }
+            ]
+        },
+        None,
+    )
+
+    assert result == {
+        "processed_records": 0,
+        "batchItemFailures": [{"itemIdentifier": "msg-1"}],
+    }

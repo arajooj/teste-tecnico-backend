@@ -14,6 +14,7 @@ from app.core.config import get_settings
 class ProposalQueueMessage:
     action: str
     proposal_id: str
+    job_id: str
 
 
 class ProposalQueue:
@@ -31,8 +32,8 @@ class ProposalQueue:
             aws_secret_access_key=settings.aws_secret_access_key,
         )
 
-    def send_message(self, *, action: str, proposal_id: str) -> None:
-        payload = ProposalQueueMessage(action=action, proposal_id=proposal_id)
+    def send_message(self, *, action: str, proposal_id: str, job_id: str) -> None:
+        payload = ProposalQueueMessage(action=action, proposal_id=proposal_id, job_id=job_id)
         self._client.send_message(
             QueueUrl=self._get_queue_url(),
             MessageBody=json.dumps(asdict(payload)),

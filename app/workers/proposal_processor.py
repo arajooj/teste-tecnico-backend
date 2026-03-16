@@ -16,7 +16,12 @@ from app.modules.proposals.domain.exceptions import (
     ProposalNotFoundError,
 )
 from app.modules.proposals.infrastructure.bank_client import MockBankClient
-from app.modules.proposals.infrastructure.models import ProposalStatus, ProposalType
+from app.modules.proposals.infrastructure.models import (
+    ProposalJobAction,
+    ProposalJobStatus,
+    ProposalStatus,
+    ProposalType,
+)
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 
 MODEL_REGISTRY = (identity_models,)
@@ -27,12 +32,13 @@ def process_proposal_job(
     *,
     action: str,
     proposal_id: UUID,
+    job_id: UUID,
     session_factory: Callable = SessionLocal,
     bank_client_factory: Callable = MockBankClient,
 ) -> None:
     logger.info(
         "Processing proposal job",
-        extra={"action": action, "proposal_id": str(proposal_id)},
+        extra={"action": action, "proposal_id": str(proposal_id), "job_id": str(job_id)},
     )
     with session_factory() as session:
         proposal_repository = ProposalRepository(session)
@@ -42,6 +48,12 @@ def process_proposal_job(
         proposal = proposal_repository.get_by_id(proposal_id=proposal_id)
         if proposal is None:
             raise ProposalNotFoundError()
+        job = proposal_repository.get_job_by_id(job_id=job_id)
+        if job is None:
+            raise InvalidProposalStateError("Proposal job not found")
+        if job.status == ProposalJobStatus.COMPLETED.value:
+            logger.info("Skipping already completed job", extra={"job_id": str(job_id)})
+            return
 
         client = client_repository.get_by_tenant_and_id(
             tenant_id=proposal.tenant_id,
@@ -50,42 +62,65 @@ def process_proposal_job(
         if client is None:
             raise ProposalClientNotFoundError()
 
+        proposal_repository.mark_job_processing(job, proposal)
         proposal.status = ProposalStatus.PROCESSING.value
         proposal_repository.save(proposal)
 
-        if action == "simulate":
-            protocol = bank_client.simulate(
-                cpf=client.cpf,
-                amount=proposal.amount,
-                installments=proposal.installments,
+        try:
+            if action == ProposalJobAction.SIMULATE.value:
+                if proposal.simulation_callback_token is None:
+                    raise InvalidProposalStateError("Proposal has no simulation callback token")
+
+                protocol = bank_client.simulate(
+                    cpf=client.cpf,
+                    amount=proposal.amount,
+                    installments=proposal.installments,
+                    webhook_url=bank_client.build_callback_url(
+                        callback_token=proposal.simulation_callback_token
+                    ),
+                )
+                proposal.external_protocol = protocol
+                proposal.simulation_protocol = protocol
+                proposal.type = ProposalType.SIMULATION.value
+                proposal_repository.save(proposal)
+                proposal_repository.mark_job_completed(job, proposal)
+                logger.info("Simulation sent to bank", extra={"proposal_id": str(proposal.id)})
+                return
+
+            if action == ProposalJobAction.SUBMIT.value:
+                if proposal.simulation_protocol is None:
+                    raise InvalidProposalStateError("Proposal has no simulation protocol")
+                if proposal.inclusion_callback_token is None:
+                    raise InvalidProposalStateError("Proposal has no inclusion callback token")
+
+                protocol = bank_client.submit(
+                    protocol=proposal.simulation_protocol,
+                    client_name=client.name,
+                    client_cpf=client.cpf,
+                    client_birth_date=client.birth_date,
+                    amount=proposal.amount,
+                    installments=proposal.installments,
+                    webhook_url=bank_client.build_callback_url(
+                        callback_token=proposal.inclusion_callback_token
+                    ),
+                )
+                proposal.external_protocol = protocol
+                proposal.inclusion_protocol = protocol
+                proposal.type = ProposalType.PROPOSAL.value
+                proposal.status = ProposalStatus.SUBMITTED.value
+                proposal_repository.save(proposal)
+                proposal_repository.mark_job_completed(job, proposal)
+                logger.info("Proposal submitted to bank", extra={"proposal_id": str(proposal.id)})
+                return
+
+            raise InvalidProposalStateError("Unsupported proposal queue action")
+        except Exception as exc:
+            proposal_repository.mark_job_failed(
+                job=job,
+                proposal=proposal,
+                error_message=str(exc),
             )
-            proposal.external_protocol = protocol
-            proposal.type = ProposalType.SIMULATION.value
-            proposal_repository.save(proposal)
-            logger.info("Simulation sent to bank", extra={"proposal_id": str(proposal.id)})
-            return
-
-        if action == "submit":
-            if proposal.external_protocol is None:
-                raise InvalidProposalStateError("Proposal has no simulation protocol")
-
-            simulation_protocol = proposal.external_protocol
-            protocol = bank_client.submit(
-                protocol=simulation_protocol,
-                client_name=client.name,
-                client_cpf=client.cpf,
-                client_birth_date=client.birth_date,
-                amount=proposal.amount,
-                installments=proposal.installments,
-            )
-            proposal.external_protocol = protocol
-            proposal.type = ProposalType.PROPOSAL.value
-            proposal.status = ProposalStatus.SUBMITTED.value
-            proposal_repository.save(proposal)
-            logger.info("Proposal submitted to bank", extra={"proposal_id": str(proposal.id)})
-            return
-
-        raise InvalidProposalStateError("Unsupported proposal queue action")
+            raise
 
 
 def process_queue_message(
@@ -98,6 +133,7 @@ def process_queue_message(
     process_proposal_job(
         action=payload["action"],
         proposal_id=UUID(payload["proposal_id"]),
+        job_id=UUID(payload["job_id"]),
         session_factory=session_factory,
         bank_client_factory=bank_client_factory,
     )

@@ -4,16 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from app.core.exceptions import AppException
 from app.core.security import AuthenticatedUser
 from app.modules.clients.infrastructure.repository import ClientRepository
 from app.modules.proposals.domain.exceptions import (
     InvalidProposalStateError,
     ProposalClientNotFoundError,
+    ProposalDispatchError,
     ProposalNotFoundError,
 )
-from app.modules.proposals.infrastructure.models import ProposalModel, ProposalStatus, ProposalType
+from app.modules.proposals.infrastructure.models import (
+    ProposalJobAction,
+    ProposalModel,
+    ProposalStatus,
+    ProposalType,
+)
 from app.modules.proposals.infrastructure.queue import ProposalQueue
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 
@@ -58,10 +65,14 @@ class ProposalCommands:
             amount=command.amount,
             installments=command.installments,
             status=ProposalStatus.PENDING.value,
+            simulation_callback_token=uuid4().hex,
             created_by=actor.user_id,
         )
-        proposal = self._repository.add(proposal)
-        self._queue.send_message(action="simulate", proposal_id=str(proposal.id))
+        proposal, job = self._repository.create_proposal_with_job(
+            proposal=proposal,
+            action=ProposalJobAction.SIMULATE,
+        )
+        self._publish_job(action=ProposalJobAction.SIMULATE, proposal=proposal, job_id=job.id)
         return proposal
 
     def submit(self, *, actor: AuthenticatedUser, proposal_id: UUID) -> ProposalModel:
@@ -76,7 +87,39 @@ class ProposalCommands:
 
         proposal.type = ProposalType.PROPOSAL.value
         proposal.status = ProposalStatus.PENDING.value
-        proposal = self._repository.save(proposal)
-        self._queue.send_message(action="submit", proposal_id=str(proposal.id))
+        proposal.simulation_callback_token = None
+        proposal.inclusion_callback_token = uuid4().hex
+        job = self._repository.create_job_for_existing_proposal(
+            proposal=proposal,
+            action=ProposalJobAction.SUBMIT,
+        )
+        self._publish_job(action=ProposalJobAction.SUBMIT, proposal=proposal, job_id=job.id)
         return proposal
+
+    def _publish_job(
+        self,
+        *,
+        action: ProposalJobAction,
+        proposal: ProposalModel,
+        job_id: UUID,
+    ) -> None:
+        job = self._repository.get_job_by_id(job_id=job_id)
+        if job is None:  # pragma: no cover
+            raise AppException("Proposal job not found", status_code=500)
+
+        try:
+            self._queue.send_message(
+                action=action.value,
+                proposal_id=str(proposal.id),
+                job_id=str(job.id),
+            )
+        except Exception as exc:
+            self._repository.mark_job_failed(
+                job=job,
+                proposal=proposal,
+                error_message=f"Failed to publish async job: {exc}",
+            )
+            raise ProposalDispatchError() from exc
+
+        self._repository.mark_job_published(job, proposal)
 

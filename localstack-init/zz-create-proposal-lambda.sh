@@ -29,7 +29,7 @@ if ! awslocal lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>
     --timeout 60 \
     --memory-size 512 \
     --code "S3Bucket=$ARTIFACT_BUCKET,S3Key=$ARTIFACT_KEY" \
-    --environment "Variables={DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/teste_tecnico,MOCK_BANK_BASE_URL=http://mock-bank:8001,AWS_ENDPOINT_URL=http://localstack:4566,AWS_REGION=us-east-1,AWS_ACCESS_KEY_ID=test,AWS_SECRET_ACCESS_KEY=test,SQS_QUEUE_NAME=proposal-processing-queue}"
+    --environment "Variables={DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/teste_tecnico,MOCK_BANK_BASE_URL=http://mock-bank:8001,WEBHOOK_CALLBACK_BASE_URL=http://host.docker.internal:8000,AWS_ENDPOINT_URL=http://localstack:4566,AWS_REGION=us-east-1,AWS_ACCESS_KEY_ID=test,AWS_SECRET_ACCESS_KEY=test,SQS_QUEUE_NAME=proposal-processing-queue}"
 else
   echo "Lambda $FUNCTION_NAME já existe, pulando criação."
 fi

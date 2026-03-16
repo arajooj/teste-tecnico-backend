@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     sqs_queue_name: str = "proposal-processing-queue"
 
     mock_bank_base_url: str = "http://localhost:8001"
+    webhook_callback_base_url: str = "http://host.docker.internal:8000"
 
     model_config = SettingsConfigDict(
         env_file=".env",

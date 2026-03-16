@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
@@ -14,13 +16,18 @@ class IdentityRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def list_active_users_by_email(self, email: str) -> list[UserModel]:
+    def get_active_user_by_tenant_and_email(
+        self,
+        *,
+        tenant_id: UUID,
+        email: str,
+    ) -> UserModel | None:
         statement: Select[tuple[UserModel]] = (
             select(UserModel)
             .where(
+                UserModel.tenant_id == tenant_id,
                 UserModel.email == email,
                 UserModel.is_active.is_(True),
             )
-            .order_by(UserModel.created_at.asc(), UserModel.id.asc())
         )
-        return list(self._session.scalars(statement))
+        return self._session.scalar(statement)

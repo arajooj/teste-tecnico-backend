@@ -12,7 +12,14 @@ from app.modules.clients.infrastructure.models import ClientModel
 from app.modules.clients.infrastructure.repository import ClientRepository
 from app.modules.proposals.application.commands import ProposalCommands
 from app.modules.proposals.application.queries import ProposalQueries
-from app.modules.proposals.infrastructure.models import ProposalModel, ProposalStatus, ProposalType
+from app.modules.proposals.infrastructure.models import (
+    ProposalJobAction,
+    ProposalJobModel,
+    ProposalJobStatus,
+    ProposalModel,
+    ProposalStatus,
+    ProposalType,
+)
 from app.modules.proposals.infrastructure.queue import ProposalQueue
 from app.modules.proposals.infrastructure.repository import ProposalRepository
 from app.modules.webhooks.application.services import BankCallbackCommand, WebhookService
@@ -49,12 +56,20 @@ def create_proposal(
     proposal_type: str = ProposalType.SIMULATION.value,
     status: str = ProposalStatus.PENDING.value,
     external_protocol: str | None = None,
+    simulation_protocol: str | None = None,
+    inclusion_protocol: str | None = None,
+    simulation_callback_token: str | None = None,
+    inclusion_callback_token: str | None = None,
 ) -> ProposalModel:
     user = seeded_identity["alpha_user"]
     proposal = ProposalModel(
         tenant_id=user.tenant_id,
         client_id=client_id,
         external_protocol=external_protocol,
+        simulation_protocol=simulation_protocol,
+        inclusion_protocol=inclusion_protocol,
+        simulation_callback_token=simulation_callback_token,
+        inclusion_callback_token=inclusion_callback_token,
         type=proposal_type,
         amount=Decimal("5000.00"),
         installments=12,
@@ -67,17 +82,39 @@ def create_proposal(
     return proposal
 
 
+def create_job_for_proposal(
+    db_session,
+    proposal: ProposalModel,
+    *,
+    action: str,
+    status: str = ProposalJobStatus.PUBLISHED.value,
+) -> ProposalJobModel:
+    job = ProposalJobModel(
+        proposal_id=proposal.id,
+        action=action,
+        status=status,
+        payload={"action": action, "proposal_id": str(proposal.id)},
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    return job
+
+
 class DummyQueue(ProposalQueue):
     def __init__(self) -> None:
         self.messages: list[dict[str, str]] = []
 
-    def send_message(self, *, action: str, proposal_id: str) -> None:
-        self.messages.append({"action": action, "proposal_id": proposal_id})
+    def send_message(self, *, action: str, proposal_id: str, job_id: str) -> None:
+        self.messages.append({"action": action, "proposal_id": proposal_id, "job_id": job_id})
 
 
 class DummyBankClient:
     def __init__(self, submit_protocol: str = "MOCK-PROP-1") -> None:
         self.submit_protocol = submit_protocol
+
+    def build_callback_url(self, *, callback_token: str) -> str:
+        return f"http://callback.local/api/webhooks/bank-callback?callback_token={callback_token}"
 
     def simulate(self, **kwargs) -> str:
         return "MOCK-SIM-1"
@@ -159,11 +196,14 @@ def test_webhook_service_maps_simulation_rejection_to_failed(db_session, seeded_
         client.id,
         status=ProposalStatus.PROCESSING.value,
         external_protocol="MOCK-SIM-REJECTED",
+        simulation_protocol="MOCK-SIM-REJECTED",
+        simulation_callback_token="sim-token",
     )
     service = WebhookService(WebhookRepository(ProposalRepository(db_session)))
 
     updated = service.handle_bank_callback(
         command=BankCallbackCommand(
+            callback_token="sim-token",
             protocol="MOCK-SIM-REJECTED",
             event="simulation_completed",
             status="rejected",
@@ -179,7 +219,13 @@ def test_webhook_service_maps_simulation_rejection_to_failed(db_session, seeded_
 def test_worker_rejects_missing_proposal(db_session):
     with pytest.raises(AppException, match="Proposal not found"):
         proposal_processor.process_queue_message(
-            json.dumps({"action": "simulate", "proposal_id": str(uuid4())}),
+            json.dumps(
+                {
+                    "action": "simulate",
+                    "proposal_id": str(uuid4()),
+                    "job_id": str(uuid4()),
+                }
+            ),
             session_factory=lambda: nullcontext(db_session),
             bank_client_factory=DummyBankClient,
         )
@@ -198,10 +244,88 @@ def test_worker_rejects_missing_client(db_session, seeded_identity):
     db_session.add(proposal)
     db_session.commit()
     db_session.refresh(proposal)
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SIMULATE.value,
+    )
 
     with pytest.raises(AppException, match="Client not found"):
         proposal_processor.process_queue_message(
-            json.dumps({"action": "simulate", "proposal_id": str(proposal.id)}),
+            json.dumps(
+                {
+                    "action": "simulate",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(job.id),
+                }
+            ),
+            session_factory=lambda: nullcontext(db_session),
+            bank_client_factory=DummyBankClient,
+        )
+
+
+def test_worker_rejects_missing_job(db_session, seeded_identity):
+    client = create_client(db_session, seeded_identity, cpf="77766655544")
+    proposal = create_proposal(db_session, seeded_identity, client.id)
+
+    with pytest.raises(AppException, match="Proposal job not found"):
+        proposal_processor.process_queue_message(
+            json.dumps(
+                {
+                    "action": "simulate",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(uuid4()),
+                }
+            ),
+            session_factory=lambda: nullcontext(db_session),
+            bank_client_factory=DummyBankClient,
+        )
+
+
+def test_worker_skips_completed_job(db_session, seeded_identity):
+    client = create_client(db_session, seeded_identity, cpf="44455566677")
+    proposal = create_proposal(db_session, seeded_identity, client.id)
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SIMULATE.value,
+        status=ProposalJobStatus.COMPLETED.value,
+    )
+
+    proposal_processor.process_queue_message(
+        json.dumps(
+            {
+                "action": "simulate",
+                "proposal_id": str(proposal.id),
+                "job_id": str(job.id),
+            }
+        ),
+        session_factory=lambda: nullcontext(db_session),
+        bank_client_factory=DummyBankClient,
+    )
+
+    db_session.refresh(proposal)
+    assert proposal.status == ProposalStatus.PENDING.value
+
+
+def test_worker_rejects_simulation_without_callback_token(db_session, seeded_identity):
+    client = create_client(db_session, seeded_identity, cpf="88877766655")
+    proposal = create_proposal(db_session, seeded_identity, client.id)
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SIMULATE.value,
+    )
+
+    with pytest.raises(AppException, match="Proposal has no simulation callback token"):
+        proposal_processor.process_queue_message(
+            json.dumps(
+                {
+                    "action": "simulate",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(job.id),
+                }
+            ),
             session_factory=lambda: nullcontext(db_session),
             bank_client_factory=DummyBankClient,
         )
@@ -215,11 +339,53 @@ def test_worker_rejects_submit_without_simulation_protocol(db_session, seeded_id
         client.id,
         proposal_type=ProposalType.PROPOSAL.value,
         status=ProposalStatus.SIMULATED.value,
+        inclusion_callback_token="inc-token",
+    )
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SUBMIT.value,
     )
 
     with pytest.raises(AppException, match="Proposal has no simulation protocol"):
         proposal_processor.process_queue_message(
-            json.dumps({"action": "submit", "proposal_id": str(proposal.id)}),
+            json.dumps(
+                {
+                    "action": "submit",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(job.id),
+                }
+            ),
+            session_factory=lambda: nullcontext(db_session),
+            bank_client_factory=DummyBankClient,
+        )
+
+
+def test_worker_rejects_submit_without_inclusion_callback_token(db_session, seeded_identity):
+    client = create_client(db_session, seeded_identity, cpf="22233344455")
+    proposal = create_proposal(
+        db_session,
+        seeded_identity,
+        client.id,
+        proposal_type=ProposalType.PROPOSAL.value,
+        status=ProposalStatus.SIMULATED.value,
+        simulation_protocol="MOCK-SIM-1",
+    )
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SUBMIT.value,
+    )
+
+    with pytest.raises(AppException, match="Proposal has no inclusion callback token"):
+        proposal_processor.process_queue_message(
+            json.dumps(
+                {
+                    "action": "submit",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(job.id),
+                }
+            ),
             session_factory=lambda: nullcontext(db_session),
             bank_client_factory=DummyBankClient,
         )
@@ -228,10 +394,21 @@ def test_worker_rejects_submit_without_simulation_protocol(db_session, seeded_id
 def test_worker_rejects_unsupported_queue_action(db_session, seeded_identity):
     client = create_client(db_session, seeded_identity, cpf="33322211100")
     proposal = create_proposal(db_session, seeded_identity, client.id)
+    job = create_job_for_proposal(
+        db_session,
+        proposal,
+        action=ProposalJobAction.SIMULATE.value,
+    )
 
     with pytest.raises(AppException, match="Unsupported proposal queue action"):
         proposal_processor.process_queue_message(
-            json.dumps({"action": "cancel", "proposal_id": str(proposal.id)}),
+            json.dumps(
+                {
+                    "action": "cancel",
+                    "proposal_id": str(proposal.id),
+                    "job_id": str(job.id),
+                }
+            ),
             session_factory=lambda: nullcontext(db_session),
             bank_client_factory=DummyBankClient,
         )

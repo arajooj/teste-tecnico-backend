@@ -1,3 +1,8 @@
+import os
+
+# Garante que o lifespan da API não tente conectar ao PostgreSQL/SQS nos testes.
+os.environ.setdefault("ENVIRONMENT", "testing")
+
 import uuid
 from collections.abc import Callable, Generator
 
@@ -13,13 +18,14 @@ from app.core.security import create_access_token, hash_password
 from app.main import create_application
 from app.modules.clients.infrastructure.models import ClientModel
 from app.modules.identity.infrastructure.models import TenantModel, UserModel, UserRole
-from app.modules.proposals.infrastructure.models import ProposalModel
+from app.modules.proposals.infrastructure.models import ProposalJobModel, ProposalModel
 
 TABLES = [
     TenantModel.__table__,
     UserModel.__table__,
     ClientModel.__table__,
     ProposalModel.__table__,
+    ProposalJobModel.__table__,
 ]
 
 

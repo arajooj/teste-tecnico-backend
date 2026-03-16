@@ -48,6 +48,7 @@ Valores padrão:
 - `AWS_ENDPOINT_URL=http://localhost:4566`
 - `SQS_QUEUE_NAME=proposal-processing-queue`
 - `MOCK_BANK_BASE_URL=http://localhost:8001`
+- `WEBHOOK_CALLBACK_BASE_URL=http://host.docker.internal:8000`
 - `JWT_SECRET_KEY=change-me`
 
 ## Subindo o ambiente local
@@ -94,8 +95,8 @@ python -m scripts.seed
 
 Credenciais seeded:
 
-- Tenant Alpha: `alpha@example.com` / `123456`
-- Tenant Beta: `beta@example.com` / `123456`
+- Tenant Alpha: `11111111-1111-1111-1111-111111111111` + `alpha@example.com` / `123456`
+- Tenant Beta: `22222222-2222-2222-2222-222222222222` + `beta@example.com` / `123456`
 
 ### 4. API
 
@@ -120,12 +121,13 @@ Para ficar mais próximo de produção, a solução não ficou restrita a um wor
 
 Fluxo implementado:
 
-1. `POST /api/proposals/simulate` cria a proposta com status `pending` e publica um job no `SQS`.
-2. A Lambda registrada no `LocalStack` consome a fila.
-3. A lógica de processamento executada pela Lambda chama o banco mock e grava o `external_protocol`.
-4. O banco mock envia `POST /api/webhooks/bank-callback`.
-5. O webhook atualiza status, `bank_response`, `interest_rate` e `installment_value` quando aplicável.
-6. `POST /api/proposals/{id}/submit` reaproveita o mesmo fluxo assíncrono para inclusão da proposta.
+1. `POST /api/proposals/simulate` cria a proposta com status `pending`, gera token de callback exclusivo e persiste um job assíncrono.
+2. O publish para o `SQS` usa esse job persistido. Se falhar, o erro fica rastreado no banco e o redespacho é tentado no startup seguinte da API.
+3. A Lambda registrada no `LocalStack` consome a fila e processa o job.
+4. A lógica de processamento executada pela Lambda chama o banco mock, grava `simulation_protocol` ou `inclusion_protocol` e mantém `external_protocol` como protocolo ativo atual.
+5. O banco mock envia `POST /api/webhooks/bank-callback?callback_token=...`.
+6. O webhook valida token, fase esperada, protocolo e idempotência antes de atualizar status e `bank_response`.
+7. `POST /api/proposals/{id}/submit` reaproveita o mesmo fluxo assíncrono para inclusão da proposta, com um novo token de callback.
 
 Observação: neste projeto não há um comando separado para subir um worker manual em polling. O caminho principal de consumo assíncrono é `SQS -> Lambda no LocalStack`.
 
@@ -160,7 +162,7 @@ Observação: neste projeto não há um comando separado para subir um worker ma
 ```bash
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"alpha@example.com\",\"password\":\"123456\"}"
+  -d "{\"tenant_id\":\"11111111-1111-1111-1111-111111111111\",\"email\":\"alpha@example.com\",\"password\":\"123456\"}"
 ```
 
 ### Criar cliente
@@ -190,6 +192,29 @@ Windows, Linux e macOS:
 
 ```powershell
 python -m pytest --cov --cov-report=term-missing --cov-report=xml
+```
+
+### Rodar smoke E2E local
+
+Esse smoke usa a infraestrutura real do desafio (`docker compose`, `LocalStack`, `mock-bank` e a API local) e valida o fluxo `login -> cliente -> simulação -> webhook -> submissão -> webhook`.
+
+Pré-requisitos:
+
+- infraestrutura levantada com `docker compose up -d`
+- migrations aplicadas e seed executado
+- API rodando localmente na porta `8000`
+
+Windows:
+
+```powershell
+$env:RUN_DOCKER_E2E=1
+python -m pytest tests/integration/test_smoke_e2e.py -m integration
+```
+
+Linux / macOS:
+
+```bash
+RUN_DOCKER_E2E=1 python -m pytest tests/integration/test_smoke_e2e.py -m integration
 ```
 
 Essa meta de cobertura foi validada localmente durante a entrega.
@@ -239,7 +264,7 @@ chmod +x ./scripts/build_lambda_package.sh
 ## Troubleshooting
 
 - Se a API não conectar no banco, confirme se `postgres` está saudável e rode `alembic upgrade head`.
-- Se o webhook não atualizar a proposta, verifique se a API está disponível em `http://host.docker.internal:8000`.
+- Se o webhook não atualizar a proposta, verifique se a API está disponível em `WEBHOOK_CALLBACK_BASE_URL` e se a Lambda foi criada com a mesma URL.
 - Se a fila não processar, confira se o `docker compose up -d` gerou a Lambda e as filas no `LocalStack`.
 - Se mudar dependências usadas pela Lambda, regenere o pacote com `.\scripts\build_lambda_package.ps1`.
 - Em Linux, confirme que a sua versão do Docker suporta `host-gateway`, já que o `mock-bank` precisa alcançar a API no host.

@@ -22,6 +22,8 @@ class ProposalResponse(BaseModel):
     tenant_id: UUID
     client_id: UUID
     external_protocol: str | None
+    simulation_protocol: str | None
+    inclusion_protocol: str | None
     type: str
     amount: Decimal
     installments: int
@@ -29,6 +31,8 @@ class ProposalResponse(BaseModel):
     installment_value: Decimal | None
     status: str
     bank_response: dict | None
+    processing_attempts: int
+    last_bank_error: str | None
     created_at: datetime
     updated_at: datetime
     created_by: UUID
