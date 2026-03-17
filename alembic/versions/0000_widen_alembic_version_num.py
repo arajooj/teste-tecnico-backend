@@ -1,6 +1,7 @@
-"""Widen alembic_version.version_num so long revision IDs (e.g. 0002_add_proposal_jobs_if_missing) fit.
+"""Widen alembic_version.version_num so long revision IDs fit.
 
-Runs first on fresh DBs; avoids manual ALTER on PostgreSQL when revision IDs exceed default length.
+Runs first on fresh DBs and avoids manual ALTER on PostgreSQL when
+revision IDs exceed the default length.
 """
 
 from alembic import op
