@@ -199,6 +199,64 @@ Windows, Linux e macOS:
 python -m pytest --cov --cov-report=term-missing --cov-report=xml
 ```
 
+Observação: a suíte padrão exclui os testes marcados com `stress`, então esse comando continua rápido e estável.
+
+### Rodar testes de estresse
+
+Esses testes enviam várias requisições concorrentes para validar login, listagem e criação sob carga moderada.
+
+Por padrão eles ficam fora da suíte normal e do CI. Para executar manualmente:
+
+Windows, Linux e macOS:
+
+```powershell
+python -m pytest -m stress tests/stress/test_concurrent_requests.py -q
+```
+
+Modo padrão:
+
+- roda em-processo, sem precisar subir `docker compose`
+- usa um banco SQLite temporário e dispara várias requisições paralelas com `httpx`
+
+Os volumes e limites podem ser ajustados por variável de ambiente, sem editar o arquivo de teste:
+
+- `STRESS_LOGIN_REQUESTS`
+- `STRESS_LIST_REQUESTS`
+- `STRESS_CREATE_CLIENT_REQUESTS`
+- `STRESS_PROPOSAL_LIST_REQUESTS`
+- `STRESS_MAX_CONCURRENCY`
+- `STRESS_CLIENT_TIMEOUT_SECONDS`
+
+Exemplo com carga maior, mas ainda controlando a concorrência:
+
+Windows:
+
+```powershell
+$env:STRESS_LOGIN_REQUESTS="200"
+$env:STRESS_LIST_REQUESTS="400"
+$env:STRESS_CREATE_CLIENT_REQUESTS="120"
+$env:STRESS_PROPOSAL_LIST_REQUESTS="300"
+$env:STRESS_MAX_CONCURRENCY="40"
+python -m pytest -m stress tests/stress/test_concurrent_requests.py -q
+```
+
+Opcionalmente, você pode apontar para uma API real já em execução:
+
+Windows:
+
+```powershell
+$env:STRESS_API_URL="http://localhost:8000"
+python -m pytest -m stress tests/stress/test_concurrent_requests.py -q
+```
+
+Linux / macOS:
+
+```bash
+STRESS_API_URL=http://localhost:8000 python -m pytest -m stress tests/stress/test_concurrent_requests.py -q
+```
+
+Quando usar `STRESS_API_URL`, os testes assumem que a API já está no ar e que o seed padrão foi executado.
+
 ### Rodar smoke E2E local
 
 Esse smoke usa a infraestrutura real do desafio (`docker compose`, `LocalStack`, `mock-bank` e a API local) e valida o fluxo `login -> cliente -> simulação -> webhook -> submissão -> webhook`.
